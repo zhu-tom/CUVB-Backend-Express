@@ -1,5 +1,6 @@
+require('dotenv').config()
+
 const express = require("express");
-const gatsbyExpress = require("gatsby-plugin-express");
 const bcrypt = require("bcrypt");
 const salt_rounds = 10;
 const mongoose = require("mongoose");
@@ -20,25 +21,10 @@ const eventSchema = new mongoose.Schema({
 });
 const Event = mongoose.model("events", eventSchema, "events");
 
-
-if (process.env.NODE_ENV !== 'production') {
-    require('dotenv').config();
-}
-
 const port = process.env.PORT || 3000;
 
 const app = express();
-app.use(express.static('public/'));
 app.use(express.json());
-
-app.use(gatsbyExpress("config/gatsby-express.json", {
-    publicDir: 'public/',
-    template: 'public/404/index.html',
-  
-    // redirects all /path/ to /path
-    // should be used with gatsby-plugin-remove-trailing-slashes
-    redirectSlashes: true,
-}));
 
 app.post('/api/login', (req, res) => {
     const { email, password } = req.body;
