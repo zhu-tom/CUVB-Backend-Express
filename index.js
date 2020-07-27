@@ -5,6 +5,7 @@ const bcrypt = require("bcrypt");
 const salt_rounds = 10;
 const mongoose = require("mongoose");
 const cors = require("cors");
+const axios = require("axios");
 
 const Event = require("./models/event");
 const User = require("./models/user");
@@ -69,23 +70,40 @@ app.post('/api/signup', (req, res) => {
 });
 
 app.post('/api/events/add', (req, res) => {
-    console.log(req.headers.authorization);
-    const { date, start, end, markdown } = req.body;
+    const { date, start, end, markdown, title, location, subtitle} = req.body;
     if (req.headers.authorization === process.env.ADMIN_ID) {
         new Event({
+            title: title,
+            subtitle: subtitle,
             details: markdown,
             attendees: [],
             date: {
                 day: date,
                 start: start,
                 end: end,
-            }
+            },
+            location: location
         }).save((err) => {
             if (err) res.send(JSON.stringify({err: err}));
-            else res.send({msg: "good"});
+            else {
+                
+                res.send({msg: "good"});
+            }
         });
     }
     else {
+        res.send(JSON.stringify({err: "bad auth"}));
+    }
+});
+
+app.post('/api/events/delete', (req, res) => {
+    const {id} = req.body;
+    if (req.headers.authorization === process.env.ADMIN_ID) {
+        Event.deleteOne({_id: id}, (err) => {
+            if (err) res.send(JSON.stringify({err: err}));
+            else res.send(JSON.stringify({msg: "success"}));
+        })
+    } else {
         res.send(JSON.stringify({err: "bad auth"}));
     }
 });
@@ -107,19 +125,64 @@ app.post('/api/events/signup', (req, res) => {
 });
 
 app.get("/api/events/get", (req, res) => {
+    const { id, sort, upcoming } = req.query;
+
     if (req.headers.authorization === process.env.ADMIN_ID) {
-        const { id } = req.query;
         if (id) {
             Event.findById(id, (err, doc) => {
                 if (err) res.send(JSON.stringify({err: err}));
                 if (!doc) res.send(JSON.stringify({err: "bad id"}));
                 else res.send(JSON.stringify(doc.toJSON()));
             });
-        } else {
+        } 
+        else if (sort) {
+            let query = {};
+            if (upcoming) query = {date: {day: {$gte: Date.now()}}};
+            if (sort) {
+                Event.find(query).sort({'date.day': 1}).then((docs) => {
+                    res.send(JSON.stringify(docs.map(doc => doc.toJSON())));
+                }).catch((err) => {
+                    res.send(JSON.stringify({err: err}));
+                });
+            }
+        }
+        else {
             res.send(JSON.stringify({err: "no id"}));
         }
     } else {
         res.send(JSON.stringify({err: "bad auth"}));
+    }
+});
+
+app.post("/api/events/edit", (req, res) => {
+    const { id, markdown, date, start, end, title, location, subtitle} = req.body;
+    if (id && req.headers.authorization === process.env.ADMIN_ID) {
+        Event.findOneAndUpdate({ _id: id}, {
+            details: markdown,
+            date: {
+                day: date,
+                start: start,
+                end: end,
+            },
+            title: title,
+            location: location,
+            subtitle: subtitle,
+        }, (err, doc) => {
+            if (err) res.send(JSON.stringify({err: err}));
+            else res.send(JSON.stringify({msg: "success"}));
+        });
+    } else {
+        res.send(JSON.stringify({err: "bad auth"}));
+    }
+});
+
+app.get("/api/rebuild", (req, res) => {
+    if (req.headers.authorization === process.env.ADMIN_ID) {
+        axios.post("https://api.netlify.com/build_hooks/5f1d3661b5e249c5b3753b69").then(() => {
+            res.send(JSON.stringify({msg: "success"}));
+        }).catch((err) => {
+            res.send(JSON.stringify({err: err}));
+        });
     }
 });
 
