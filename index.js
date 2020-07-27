@@ -115,10 +115,13 @@ app.post('/api/events/signup', (req, res) => {
         if (!document) res.send(JSON.stringify({err: "no user"}));
         Event.findOne({_id: event_id, attendees: {$not : { $eq: user_id}}}, (err, doc) => {
             if (err) res.send(JSON.stringify({err: err}));
-            if (doc) res.send(JSON.stringify({err: "already in"}));
+            if (!doc) res.send(JSON.stringify({err: "already in"}));
             else {
-                doc.update({ $push: {attendees: user_id}});
-                res.send();
+                console.log(doc);
+                doc.update({ $push: {attendees: user_id}}, (err) => {
+                    if (err) res.send(JSON.stringify({err:err}));
+                    else res.send(JSON.stringify({msg: "success"}));
+                });
             }
         });
     });
