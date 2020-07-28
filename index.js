@@ -69,6 +69,43 @@ app.post('/api/signup', (req, res) => {
     }
 });
 
+app.post('/api/users/get', async (req, res) => {
+    let {users, event_id} = req.body;
+    
+    if (event_id) {
+        const event = await Event.findById(event_id);
+        users = event.attendees;
+    }
+
+    let result = [];
+    for (const id of users) {
+        const user = await User.findById(id);
+        if (user) {
+            const {password, created, ...rest} = user.toJSON();
+            result.push(rest);
+        }
+    }
+
+    res.send(JSON.stringify(result));
+});
+
+app.post("/api/events/attendees/delete", (req, res) => {
+    const {event_id, user_id} = req.body;
+
+    pullFromEvent(event_id, user_id, (err) => {
+        if (err) res.send(JSON.stringify({err:err}));
+        else {
+            res.send(JSON.stringify({msg: "success"}));
+        }
+    });
+});
+
+const pullFromEvent = (event_id, user_id, callback) => {
+    Event.updateOne({_id: event_id}, {$pull: {attendees: user_id}}, (err) => {
+        callback(err);
+    });
+}
+
 app.post('/api/events/add', (req, res) => {
     const { date, start, end, markdown, title, location, subtitle} = req.body;
     if (req.headers.authorization === process.env.ADMIN_ID) {
@@ -113,17 +150,36 @@ app.post('/api/events/signup', (req, res) => {
     User.findById(user_id, (err, document) => {
         if (err) res.send(JSON.stringify({err: err}));
         if (!document) res.send(JSON.stringify({err: "no user"}));
-        Event.findOne({_id: event_id, attendees: {$not : { $eq: user_id}}}, (err, doc) => {
-            if (err) res.send(JSON.stringify({err: err}));
-            if (!doc) res.send(JSON.stringify({err: "already in"}));
-            else {
-                console.log(doc);
-                doc.update({ $push: {attendees: user_id}}, (err) => {
+        checkSignedUp(event_id, user_id).then((doc) => {
+            if (!doc) {
+                pullFromEvent(event_id, user_id, (err) => {
                     if (err) res.send(JSON.stringify({err:err}));
                     else res.send(JSON.stringify({msg: "success"}));
                 });
             }
+            else {
+                doc.updateOne({ $push: {attendees: user_id}}, (err) => {
+                    if (err) res.send(JSON.stringify({err:err}));
+                    else res.send(JSON.stringify({msg: "success"}));
+                });
+            }
+        }).catch(err => {
+            res.send(JSON.stringify({err: err}));
         });
+    });
+});
+
+const checkSignedUp = (event_id, user_id) => {
+    return Event.findOne({_id: event_id, attendees: {$ne: user_id}});
+}
+
+app.post('/api/events/checkSignedUp', (req, res) => {
+    const {event_id, user_id } = req.body;
+    checkSignedUp(event_id, user_id).then((doc) => {
+        if (!doc) res.send(JSON.stringify({err: "already in"}));
+        else res.send(JSON.stringify({msg: "not in"}));
+    }).catch(err => {
+        res.send(JSON.stringify({err:err}));
     });
 });
 
