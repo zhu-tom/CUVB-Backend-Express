@@ -8,6 +8,8 @@ const userSchema = new mongoose.Schema({
     created: Date,
 });
 
+userSchema.index({name: "text", email: "text", id: "text"});
+
 const User = mongoose.model("users", userSchema, "users");
 
 module.exports = User;

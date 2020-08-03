@@ -6,6 +6,7 @@ const salt_rounds = 10;
 const mongoose = require("mongoose");
 const cors = require("cors");
 const axios = require("axios");
+const nodemailer = require('nodemailer');
 
 const Event = require("./models/event");
 const User = require("./models/user");
@@ -20,6 +21,34 @@ mongoose.connect(`mongodb+srv://${process.env.GATSBY_DB_USER}:${process.env.GATS
     console.log("connected to mongodb");
 }).catch((err) => {
     console.log(err);
+});
+
+let transporter = nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+        user: "carletonuvolleyball@gmail.com",
+        pass: process.env.EMAIL_PASS
+    }
+});
+
+app.post("/api/mail", (req, res) => {
+    if (req.headers.authorization === process.env.ADMIN_ID) {
+        let {subject, text, to} = req.body;
+        to = to.map(({email}) => email);
+        const mailOptions = {
+            from: 'Carleton Volleyball Club <carletonuvolleyball@gmail.com>',
+            to: to,
+            subject: subject,
+            text: text
+        };
+
+        transporter.sendMail(mailOptions, (err, info) => {
+            if (err) res.send(JSON.stringify({err:err}));
+            else res.send(JSON.stringify(info));
+        });
+    } else {
+        res.send(JSON.stringify({err:"bad auth"}));
+    }
 });
 
 app.post('/api/login', (req, res) => {
@@ -69,6 +98,10 @@ app.post('/api/signup', (req, res) => {
     }
 });
 
+app.get('/api/authenticate', (req, res) => {
+    res.send(JSON.stringify({isAdmin: req.headers.authorization === process.env.ADMIN_ID}));
+});
+
 app.post('/api/users/get', async (req, res) => {
     let {users, event_id} = req.body;
     
@@ -87,6 +120,36 @@ app.post('/api/users/get', async (req, res) => {
     }
 
     res.send(JSON.stringify(result));
+});
+
+app.get('/api/users/query', (req, res) => {
+    let {q} = req.query;
+
+    console.log(req.query);
+
+    if (req.headers.authorization === process.env.ADMIN_ID) {
+        if (q) {
+            User.find({ type:{$ne: "admin"}, $text: {$search: q, $caseSensitive: false, $diacriticSensitive: false}}, {score: {$meta: "textScore"}}).sort({score: {$meta: "textScore"}}).exec((err, docs) => {
+                if (err) res.send(JSON.stringify({err:err}));
+                else res.send(JSON.stringify({users: docs.map(val => {
+                    val = val.toJSON();
+                    delete val.password;
+                    return val;
+                })}));
+            });
+        } else {
+            User.find({type: {$ne: "admin"}}, (err, doc) => {
+                if (err) res.send(JSON.stringify({err:err}));
+                else res.send(JSON.stringify({users: doc.map(val => {
+                    val = val.toJSON();
+                    delete val.password;
+                    return val;
+                })}));
+            });
+        }
+    } else {
+        res.send(JSON.stringify({err: "bad auth"}));
+    }
 });
 
 app.post("/api/events/attendees/delete", (req, res) => {
