@@ -123,12 +123,32 @@ app.post('/api/users/get', async (req, res) => {
 });
 
 app.get('/api/users/query', (req, res) => {
-    let {q} = req.query;
+    let { q, id } = req.query;
 
     console.log(req.query);
 
     if (req.headers.authorization === process.env.ADMIN_ID) {
-        if (q) {
+        if (id) {
+            User.findById(id, (err, doc) => {
+                if (err) res.send(JSON.stringify({err:err}));
+                else {
+                    doc = doc.toJSON();
+                    delete doc.password;
+                    Event.find({attendees: {$eq: id}}, (err, docs) => {
+                        if (err) res.send(JSON.stringify({err:err}));
+                        else {
+                            doc.events = docs.map(doc => {
+                                doc = doc.toJSON();
+                                delete doc.attendees;
+                                return doc;
+                            });
+                            res.send(JSON.stringify({user: doc}));
+                        }
+                    });
+                }
+            });
+        }
+        else if (q) {
             User.find({ type:{$ne: "admin"}, $text: {$search: q, $caseSensitive: false, $diacriticSensitive: false}}, {score: {$meta: "textScore"}}).sort({score: {$meta: "textScore"}}).exec((err, docs) => {
                 if (err) res.send(JSON.stringify({err:err}));
                 else res.send(JSON.stringify({users: docs.map(val => {
